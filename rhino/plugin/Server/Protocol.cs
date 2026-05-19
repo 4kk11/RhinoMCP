@@ -94,6 +94,16 @@ internal sealed class ToolDescriptor
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Description { get; set; }
     public JsonElement InputSchema { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ToolAnnotations? Annotations { get; set; }
+}
+
+internal sealed class ToolAnnotations
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Title { get; set; }
+    public bool ReadOnlyHint { get; set; }
+    public bool DestructiveHint { get; set; }
 }
 
 internal sealed class ListToolsResult

@@ -6,7 +6,7 @@ namespace RhMcp.Tools;
 [McpServerToolType]
 public static class ProbeIntersectionTool
 {
-    [McpServerTool(Name = "probe_intersection")]
+    [McpServerTool(Name = "probe_intersection", Title = "Probe Line/Brep Intersection", ReadOnly = true)]
     [Description("Compute intersection points between a line segment and a Brep. Returns hit points and overlap-curve count.")]
     public static string ProbeIntersection(
         RhinoDoc doc,
