@@ -23,6 +23,8 @@ Protocol](https://modelcontextprotocol.io) can drive Rhino. Choose one of the AI
 
   {{< card link="../codex" title="Codex" subtitle="OpenAI's terminal-based assistant. Point its MCP config at the Rhino router and go." >}}
 
+  {{< card link="../lm-studio" title="Local LLM" subtitle="Run an open-weight model on your own machine and drive Rhino without sending anything to the cloud." >}}
+
 {{< /cards >}}
 
 **Other MCP clients work too.** [Cursor](https://cursor.com) and
