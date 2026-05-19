@@ -6,10 +6,12 @@ using Microsoft.Extensions.Logging;
 namespace RhMcp.Router;
 
 // When a child Rhino crashes, the router only sees "connection refused" — the
-// HTTP channel went down with the process. The OS, however, writes a crash
-// artifact a few seconds later: a .ips on macOS, a minidump (.dmp) on Windows.
-// This class digs the latest one out and extracts the agent-useful parts so we
-// can surface the actual crash cause instead of just "it died".
+// HTTP channel went down with the process. The OS (and Rhino itself) writes a
+// crash artifact a few seconds later: .ips on macOS; on Windows either a
+// RhinoDotNetCrash.txt on the desktop (for unhandled CLR exceptions) or a
+// minidump under McNeel\Rhinoceros\... / WER LocalDumps. This class digs the
+// latest one out and extracts the agent-useful parts so we can surface the
+// actual crash cause instead of just "it died".
 public class RhinoCrashReportFinder(ILogger<RhinoCrashReportFinder> log)
 {
     private const int MaxFrames = 12;
@@ -59,13 +61,17 @@ public class RhinoCrashReportFinder(ILogger<RhinoCrashReportFinder> log)
         return SelectReport(candidates, pid, TryParseIps);
     }
 
-    // Windows: Rhino's own crash dump folders first (under McNeel\Rhinoceros\<ver>\),
-    // then Windows Error Reporting LocalDumps (%LOCALAPPDATA%\CrashDumps\). Rhino's
-    // folder gets priority because it's the one Rhino's CrashDumper.exe targets when
-    // the in-process handler fires — those dumps exist whether or not the user has
-    // configured WER LocalDumps in the registry.
+    // Windows: priority order is RhinoDotNetCrash.txt → Rhino's own crash dump
+    // folders → Windows Error Reporting LocalDumps. The .txt is checked first
+    // because it carries the actual managed exception type, message, and stack —
+    // the agent-actionable shape that .dmp parsing without symbols can't recover.
+    // .dmps from Rhino's CrashDumper.exe are next; they exist whether or not the
+    // user has configured WER LocalDumps in the registry. WER is the last resort.
     private RhinoCrashReport? TryFindWindows(int? pid)
     {
+        RhinoCrashReport? dotnet = TryFindRhinoDotNetCrash();
+        if (dotnet is not null) return dotnet;
+
         string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         if (string.IsNullOrEmpty(local)) return null;
 
@@ -76,6 +82,78 @@ public class RhinoCrashReportFinder(ILogger<RhinoCrashReportFinder> log)
 
         candidates.Sort((a, b) => b.LastWriteTimeUtc.CompareTo(a.LastWriteTimeUtc));
         return SelectReport(candidates.ToArray(), pid, TryParseMinidump);
+    }
+
+    // RhinoDotNetCrash.txt is what Rhino's managed UnhandledException handler
+    // writes when a CLR exception escapes the message loop. There's only ever
+    // one (Rhino overwrites it on each crash) and it has no pid, so the only
+    // useful check is "was it written recently". The fuzzy window's "most recent
+    // crash is overwhelmingly likely to be ours" assumption applies — same as
+    // the macOS fuzzy fallback.
+    private RhinoCrashReport? TryFindRhinoDotNetCrash()
+    {
+        foreach (string dir in EnumerateDesktopDirs())
+        {
+            string path = Path.Combine(dir, "RhinoDotNetCrash.txt");
+            if (!File.Exists(path)) continue;
+
+            FileInfo info;
+            try { info = new FileInfo(path); }
+            catch { continue; }
+            if (DateTime.UtcNow - info.LastWriteTimeUtc > FuzzyMatchWindow) continue;
+
+            RhinoCrashReport? report = TryParseDotNetCrash(path);
+            if (report is not null) return report;
+        }
+        return null;
+    }
+
+    // SpecialFolder.Desktop follows OneDrive redirection, but Rhino has been
+    // known to write to the literal %USERPROFILE%\Desktop regardless. Probe
+    // both so we don't miss the file under either layout.
+    private static IEnumerable<string> EnumerateDesktopDirs()
+    {
+        HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
+        string special = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+        if (!string.IsNullOrEmpty(special) && seen.Add(special)) yield return special;
+
+        string profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (!string.IsNullOrEmpty(profile))
+        {
+            string fallback = Path.Combine(profile, "Desktop");
+            if (seen.Add(fallback)) yield return fallback;
+        }
+    }
+
+    // RhinoDotNetCrash.txt is just the [ERROR] FATAL UNHANDLED EXCEPTION block —
+    // the same shape we already parse out of macOS asiBacktraces, with no header
+    // or pid. CaptureTime comes from the file's mtime (the only timestamp source).
+    internal RhinoCrashReport? TryParseDotNetCrash(string path)
+    {
+        try
+        {
+            string text = File.ReadAllText(path);
+            var (exception, frames) = ParseManagedExceptionText(text);
+            if (exception is null) return null;
+
+            string captureTime = new FileInfo(path).LastWriteTimeUtc
+                .ToString("o", CultureInfo.InvariantCulture);
+            return new RhinoCrashReport(
+                Path: path,
+                CaptureTime: captureTime,
+                BuildVersion: null,
+                Signal: null,
+                Termination: null,
+                Asi: null,
+                ManagedException: exception,
+                ManagedFrames: frames,
+                TopFrames: Array.Empty<string>());
+        }
+        catch (Exception ex)
+        {
+            log.LogDebug("Failed to parse RhinoDotNetCrash.txt at {Path}: {Error}", path, ex.Message);
+            return null;
+        }
     }
 
     private RhinoCrashReport? SelectReport(FileInfo[] candidates, int? pid, Func<string, ParsedReport?> parser)
@@ -287,8 +365,6 @@ public class RhinoCrashReportFinder(ILogger<RhinoCrashReportFinder> log)
     // contain the expected markers (older Rhinos / non-managed crashes).
     private static (string? Exception, string[] Frames) ExtractManagedException(JsonElement root)
     {
-        const int MaxManagedFrames = 10;
-
         if (!root.TryGetProperty("asiBacktraces", out var ab) || ab.ValueKind != JsonValueKind.Array)
             return (null, Array.Empty<string>());
 
@@ -299,7 +375,15 @@ public class RhinoCrashReportFinder(ILogger<RhinoCrashReportFinder> log)
             if (entry.ValueKind != JsonValueKind.String) continue;
             sb.AppendLine(entry.GetString());
         }
-        var text = sb.ToString();
+        return ParseManagedExceptionText(sb.ToString());
+    }
+
+    // Shared between the macOS asiBacktraces block and the Windows
+    // RhinoDotNetCrash.txt body — both wrap the same `[ERROR] FATAL UNHANDLED
+    // EXCEPTION: ... [END ERROR]` shape with `at <Frame> in <path>:line N` rows.
+    private static (string? Exception, string[] Frames) ParseManagedExceptionText(string text)
+    {
+        const int MaxManagedFrames = 10;
         if (text.Length == 0) return (null, Array.Empty<string>());
 
         // Scope to the FATAL UNHANDLED EXCEPTION block — everything after
