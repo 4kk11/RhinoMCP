@@ -35,7 +35,6 @@
       "env": {}
     }
   },
-  "tools_generated": true,
   "user_config": {
     "rhino_version": {
       "type": "string",
