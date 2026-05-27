@@ -25,6 +25,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+        with:
+          submodules: false
+          lfs: true
+          fetch-depth: 1
 
       - name: Read connector version
         id: ver
