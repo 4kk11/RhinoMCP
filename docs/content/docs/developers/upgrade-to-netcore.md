@@ -50,4 +50,4 @@ When your AI Assistant is done it is very important to review all of the changes
 - **The new `.csproj`.**
 - **Directory.Build.Props.**
 - **Updated Nuget references**
-- **Any updated commands** 
+- **Any updated commands**

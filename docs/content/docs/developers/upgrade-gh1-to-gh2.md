@@ -12,8 +12,7 @@ keywords:
 
 ![Voxelizer GH1 component and its GH2 equivalent solving side by side](/developer/voxelizer-gh2-conversion.png)
 
-Rhino 9 ships Grasshopper 2 alongside Grasshopper 1. If you have a GH1 plugin and you want to try upgrading to GH2, this is a perfect use of an AI agent and the Rhino MCP server. The MCP exposes parallel `g1_*` and `g2_*` tool families, so the assistant can place a GH1 component and its
-new GH2 counterpart on their respective canvases in the same session and compare what they solve to.
+Rhino 9 ships Grasshopper 2 alongside Grasshopper 1. If you have a GH1 plugin and you want to try upgrading to GH2, this is a perfect use of an AI agent and the Rhino MCP server. The MCP exposes parallel `g1_*` and `g2_*` tool families, so the assistant can place a GH1 component and its new GH2 counterpart on their respective canvases in the same session and compare what they solve to.
 
 We'll use [Voxelizer](https://github.com/ytakzk/Voxelizer) as the running example: a small, single-component GH1 plugin that's easy to follow end to end.
 
@@ -22,16 +21,11 @@ We'll use [Voxelizer](https://github.com/ytakzk/Voxelizer) as the running exampl
 With both canvases reachable, the assistant can:
 
 - Read each GH1 component's inputs, outputs, and solve logic.
-- Scaffold a GH2 equivalent in a new folder, leaving the GH1 sources
-  untouched.
-- Place the GH1 component on a GH1 canvas with sample inputs, place the
-  new GH2 component on a GH2 canvas with the same inputs, and compare
-  outputs through the MCP.
+- Scaffold a GH2 equivalent in a new folder, leaving the GH1 sources untouched.
+- Place the GH1 component on a GH1 canvas with sample inputs, place the new GH2 component on a GH2 canvas with the same inputs, and compare outputs through the MCP.
 - Iterate until both solve the same way, then move to the next component.
 
-The side-by-side check matters: GH2's parameter and data-tree conventions
-aren't a one-for-one match with GH1, so "it compiles and places" isn't
-enough on its own.
+The side-by-side check matters: GH2's parameter and data-tree conventions aren't a one-for-one match with GH1, so "it compiles and places" isn't enough on its own.
 
 ## A prompt to start with
 
@@ -93,19 +87,10 @@ Port one component at a time. For each:
 
 ## What to review
 
-- **Parameter types.** GH2's type system isn't identical to GH1's; check
-  that the assistant picked the right GH2 type rather than the
-  closest-named one.
-- **Data-tree handling.** If your GH1 component does anything non-trivial
-  with branches or paths, look at how that translates. This is the
-  most common place for "solves but wrong" bugs.
-- **Component metadata.** Names, categories, icons, GUIDs: easy to
-  get wrong, hard to fix later once users have files referencing them.
+- **Parameter types.** GH2's type system isn't identical to GH1's; check that the assistant picked the right GH2 type rather than the closest-named one.
+- **Data-tree handling.** If your GH1 component does anything non-trivial with branches or paths, look at how that translates. This is the most common place for "solves but wrong" bugs.
+- **Component metadata.** Names, categories, icons, GUIDs: easy to get wrong, hard to fix later once users have files referencing them.
 
 ## When the assistant gets stuck
 
-If a component doesn't have a clean GH2 equivalent (or relies on a GH1
-API that's gone), have the assistant skip it and surface the list of
-skipped components at the end, rather than trying to fake it. A short
-"these need human eyes" list is more useful than a stubbed component that
-silently solves to nothing.
+If a component doesn't have a clean GH2 equivalent (or relies on a GH1 API that's gone), have the assistant skip it and surface the list of skipped components at the end, rather than trying to fake it. A short "these need human eyes" list is more useful than a stubbed component that silently solves to nothing.
