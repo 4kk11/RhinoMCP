@@ -25,7 +25,7 @@ public class RhinoManager(
 {
     // Manually-started Rhino lives on 10500; children walk forward from there.
     private const int ChildPortBase = 10500;
-    private const int SpawnTimeoutSeconds = 60;
+    private int StartupTimeoutSeconds { get; } = config.StartupTimeoutSeconds;
     private static readonly TimeSpan StaleLaunchingMaxAge = TimeSpan.FromSeconds(90);
 
     private readonly int _routerPid = Environment.ProcessId;
@@ -84,12 +84,12 @@ public class RhinoManager(
     {
         if (existing.Status == SlotStatus.Ready) return existing;
 
-        var ready = store.WaitForReady(existing.SlotId, TimeSpan.FromSeconds(SpawnTimeoutSeconds), ct);
+        var ready = store.WaitForReady(existing.SlotId, TimeSpan.FromSeconds(StartupTimeoutSeconds), ct);
         if (ready is null)
         {
             throw new TimeoutException(
                 $"Slot '{existing.SlotId}' was already being launched by another router but never became ready " +
-                $"within {SpawnTimeoutSeconds}s.");
+                $"within {StartupTimeoutSeconds}s.");
         }
         return ready;
     }
@@ -106,7 +106,7 @@ public class RhinoManager(
                 log.LogInformation("Spawning Rhino {Version} as slot '{Slot}' on port {Port} (exe: {Exe})",
                     version, slotId, port, rhinoExe);
                 var proc = LaunchWindows(rhinoExe, port);
-                switch (WaitForPort(port, TimeSpan.FromSeconds(SpawnTimeoutSeconds), proc))
+                switch (WaitForPort(port, TimeSpan.FromSeconds(StartupTimeoutSeconds), proc))
                 {
                     case WaitResult.Bound:
                         break;
@@ -122,7 +122,7 @@ public class RhinoManager(
                         bool hasWindow = proc.MainWindowHandle != IntPtr.Zero;
                         try { proc.Kill(); } catch { /* best effort */ }
                         throw new TimeoutException(hasWindow
-                            ? $"Rhino {version} (pid {proc.Id}) has a main window but did not bind port {port} within {SpawnTimeoutSeconds}s. " +
+                            ? $"Rhino {version} (pid {proc.Id}) has a main window but did not bind port {port} within {StartupTimeoutSeconds}s. " +
                               $"Possible causes: license/EULA dialog blocking, plugin failed to load, runscript stuck."
                             : $"Rhino {version} (pid {proc.Id}) is running but never created a main window. " +
                               $"Likely the router was launched from a process context without interactive-desktop access " +
@@ -139,10 +139,10 @@ public class RhinoManager(
                 log.LogInformation("Launching Rhino {Version} as slot '{Slot}' on port {Port} (app: {App})",
                     version, slotId, port, rhinoExe);
                 LaunchMac(rhinoExe, port);
-                if (WaitForPort(port, TimeSpan.FromSeconds(SpawnTimeoutSeconds)) != WaitResult.Bound)
+                if (WaitForPort(port, TimeSpan.FromSeconds(StartupTimeoutSeconds)) != WaitResult.Bound)
                 {
                     throw new TimeoutException(
-                        $"Rhino {version} did not bind port {port} within {SpawnTimeoutSeconds}s. " +
+                        $"Rhino {version} did not bind port {port} within {StartupTimeoutSeconds}s. " +
                         $"Possible causes: plugin missing, plugin failed to init, license dialog, slow disk.");
                 }
                 var pid = FindPidListeningOnPort(port);
@@ -196,7 +196,7 @@ public class RhinoManager(
 
     private async Task<ChildRhino> WaitForLeadAsync(string version, string slotId, CancellationToken ct)
     {
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(SpawnTimeoutSeconds);
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(StartupTimeoutSeconds);
         while (DateTime.UtcNow < deadline)
         {
             ct.ThrowIfCancellationRequested();
@@ -205,7 +205,7 @@ public class RhinoManager(
             await Task.Delay(200, ct).ConfigureAwait(false);
         }
         throw new TimeoutException(
-            $"Slot '{slotId}' waited {SpawnTimeoutSeconds}s for a sibling Rhino {version} to become ready but none did.");
+            $"Slot '{slotId}' waited {StartupTimeoutSeconds}s for a sibling Rhino {version} to become ready but none did.");
     }
 
     public async Task<bool> CloseAsync(string slotId, CancellationToken ct = default)

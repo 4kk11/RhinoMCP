@@ -30,7 +30,9 @@
       "args": [
         "${__dirname}/router-launcher.mjs",
         "--default-version",
-        "${user_config.rhino_version}"
+        "${user_config.rhino_version}",
+        "--startup-timeout",
+        "${user_config.startup_timeout}"
       ],
       "env": {}
     }
@@ -42,6 +44,13 @@
       "description": "Which Rhino Version? Accepted values: 8, 9, WIP.",
       "required": false,
       "default": "8"
+    },
+    "startup_timeout": {
+      "type": "number",
+      "title": "Rhino Startup Timeout (seconds)",
+      "description": "How long to wait for Rhino to launch and become ready before giving up. Raise this on slow machines or when a license/EULA dialog needs clearing.",
+      "required": false,
+      "default": 60
     }
   },
   "prompts": [
