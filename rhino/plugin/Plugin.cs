@@ -15,18 +15,23 @@ public class RhMcpPlugin : PlugIn
     {
         RhinoDoc.BeginOpenDocument -= Register;
 
+        string? portStr = Environment.GetEnvironmentVariable(MCPSpawnCommand.PortEnvVar);
+        if (!string.IsNullOrEmpty(portStr)) return;
+
         try
         {
             int port = RhinoMcpHost.GetNextPort();
             if (RhinoMcpHost.StartOrRestart(e.Document, port, true))
             {
                 RhinoApp.WriteLine("The Rhino MCP Platform is ready.");
+                return;
             }
         }
         catch
         {
-            RhinoApp.WriteLine("The Rhino MCP Server failed to start");
         }
+        
+        RhinoApp.WriteLine("The Rhino MCP Server failed to start");
     }
 
     public override PlugInLoadTime LoadTime => PlugInLoadTime.AtStartup;
