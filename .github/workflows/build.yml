@@ -13,7 +13,7 @@ on:
       - '.github/workflows/docs.yml'
 
 permissions:
-  contents: write   # release job creates tags + releases
+  contents: read
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -100,6 +100,8 @@ jobs:
           retention-days: 7
 
   release:
+    permissions:
+      contents: write # Only the release job creates tags and releases.
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: macos-latest
     needs: package
